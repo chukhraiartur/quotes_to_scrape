@@ -49,14 +49,19 @@ def parse(response: Response) -> list[dict]:
     return data
 
 
-headers: dict[str] = {
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-}
+def main() -> None:
+    headers: dict[str] = {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    }
 
-url: str = 'https://quotes.toscrape.com'
+    url: str = 'https://quotes.toscrape.com'
 
-response: Response = requests.get(url=url, headers=headers)
-save_to_html(response=response)
+    response: Response = requests.get(url=url, headers=headers)
+    save_to_html(response=response)
 
-quotes_to_scrape_data: list[dict] = parse(response)
-print(json.dumps(quotes_to_scrape_data, indent=2, ensure_ascii=False))
+    quotes_to_scrape_data: list[dict] = parse(response)
+    print(json.dumps(quotes_to_scrape_data, indent=2, ensure_ascii=False))
+
+
+if __name__ == '__main__':
+    main()
