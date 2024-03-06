@@ -1,76 +1,80 @@
-# pip install requests parsel lxml
-import requests
 import json
-from parsel import Selector, SelectorList
+
+import requests
 from requests import Response
+from parsel import Selector, SelectorList
+
+from utils import WorkWithFiles
 
 
-def save_to_html(response: Response, filename: str = 'quotes') -> None:
-    with open(f'{filename}.html', 'w', encoding='utf-8') as file:
-        file.write(response.text)
+class QuotesToScrapeParser(WorkWithFiles):
+    def __init__(self, url: str = 'https://quotes.toscrape.com') -> None:
+        self.url = url
+        self.headers = self.get_headers()
+        self.response = self.get_response()
+        self.save_to_html(self.response)
 
+    def get_headers(self) -> dict:
+        return {
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        }
 
-def read_from_html(filename: str = 'quotes') -> str:
-    try:
-        with open(f'{filename}.html', 'r', encoding='utf-8') as file:
-            html = file.read()
-    except FileNotFoundError as e:
-        print('ERROR:', e)
-        html = ''
+    def get_response(self) -> Response:
+        return requests.get(url=self.url, headers=self.headers)
 
-    return html
+    def parse(self) -> list[dict]:
+        data: list[dict] = []
 
+        while True:
+            selector: Selector = Selector(text=self.response.text)
 
-def parse(response: Response, headers: dict) -> list[dict]:
-    data: list[dict] = []
+            page_data = self.parse_page(selector)
+            data.extend(page_data)
 
-    while True:
-        selector: Selector = Selector(text=response.text)
+            if next_button := selector.css('.next'):
+                url = self.url + next_button.css('a::attr(href)').get()
+                self.response = requests.get(url=url, headers=self.headers)
+            else:
+                break
 
-        quotes: SelectorList = selector.css('.quote')
-        for quote in quotes:
-            text: str = quote.css('.text::text').get().strip()[1:-1]
-            author: str = quote.css('[itemprop="author"]::text').get().strip()
-            link: str = response.url + quote.css('span a::attr(href)').get()[1:]
-            tags: list[dict] = [
-                {
-                    'name': tag.css('::text').get().strip(),
-                    'link': response.url + tag.css('::attr(href)').get()[1:]
-                }
-                for tag in quote.css('.tags .tag')
-            ]
+        return data
 
-            data.append({
-                'text': text,
-                'author': author,
-                'link': link,
-                'tags': tags
-            })
+    def parse_page(self, selector: Selector) -> list[dict]:
+        return [
+            {
+                'text': self.get_text(quote),
+                'author': self.get_author(quote),
+                'link': self.get_link(quote),
+                'tags': self.get_tags(quote)
+            }
+            for quote in selector.css('.quote')
+        ]
 
-        next_button = selector.css('.next')
-        if next_button:
-            url = 'https://quotes.toscrape.com' + next_button.css('a::attr(href)').get()
-            response: Response = requests.get(url=url, headers=headers)
-        else:
-            break
+    def get_text(self, quote: Selector) -> str:
+        return quote.css('.text::text').get().strip()[1:-1]
 
-    return data
+    def get_author(self, quote: Selector) -> str:
+        return quote.css('[itemprop="author"]::text').get().strip()
+
+    def get_link(self, quote: Selector) -> str:
+        return self.url + quote.css('span a::attr(href)').get()
+
+    def get_tags(self, quote: Selector) -> list[dict]:
+        return [
+            {
+                'name': tag.css('::text').get().strip(),
+                'link': self.url + tag.css('::attr(href)').get()
+            }
+            for tag in quote.css('.tags .tag')
+        ]
 
 
 def main() -> None:
-    headers: dict[str] = {
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                      'Chrome/122.0.0.0 Safari/537.36',
-    }
+    quotes_to_scrape_obj = QuotesToScrapeParser()
+    data = quotes_to_scrape_obj.parse()
 
-    url: str = 'https://quotes.toscrape.com'
-
-    response: Response = requests.get(url=url, headers=headers)
-    save_to_html(response=response)
-
-    quotes_to_scrape_data: list[dict] = parse(response, headers)
-    print(json.dumps(quotes_to_scrape_data, indent=2, ensure_ascii=False))
-    print(len(quotes_to_scrape_data))
+    print(json.dumps(data, indent=2, ensure_ascii=False))
+    print(len(data))
 
 
 if __name__ == '__main__':
